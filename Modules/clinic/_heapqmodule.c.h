@@ -2,6 +2,10 @@
 preserve
 [clinic start generated code]*/
 
+#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
+#endif
 #include "pycore_abstract.h"      // _PyNumber_Index()
 #include "pycore_modsupport.h"    // _PyArg_CheckPositional()
 
@@ -195,25 +199,55 @@ exit:
 }
 
 PyDoc_STRVAR(_heapq_heapfix__doc__,
-"heapfix($module, heap, index, /)\n"
+"heapfix($module, heap, index, /, *, heapmap=<unrepresentable>)\n"
 "--\n"
 "\n"
 "Restore the heap invariant when the element at the given index has been modified.");
 
 #define _HEAPQ_HEAPFIX_METHODDEF    \
-    {"heapfix", _PyCFunction_CAST(_heapq_heapfix), METH_FASTCALL, _heapq_heapfix__doc__},
+    {"heapfix", _PyCFunction_CAST(_heapq_heapfix), METH_FASTCALL|METH_KEYWORDS, _heapq_heapfix__doc__},
 
 static PyObject *
-_heapq_heapfix_impl(PyObject *module, PyObject *heap, Py_ssize_t index);
+_heapq_heapfix_impl(PyObject *module, PyObject *heap, Py_ssize_t index,
+                    PyObject *heapmap);
 
 static PyObject *
-_heapq_heapfix(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+_heapq_heapfix(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
 {
     PyObject *return_value = NULL;
+    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+
+    #define NUM_KEYWORDS 1
+    static struct {
+        PyGC_Head _this_is_not_used;
+        PyObject_VAR_HEAD
+        PyObject *ob_item[NUM_KEYWORDS];
+    } _kwtuple = {
+        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
+        .ob_item = { &_Py_ID(heapmap), },
+    };
+    #undef NUM_KEYWORDS
+    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
+
+    #else  // !Py_BUILD_CORE
+    #  define KWTUPLE NULL
+    #endif  // !Py_BUILD_CORE
+
+    static const char * const _keywords[] = {"", "", "heapmap", NULL};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .fname = "heapfix",
+        .kwtuple = KWTUPLE,
+    };
+    #undef KWTUPLE
+    PyObject *argsbuf[3];
+    Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 2;
     PyObject *heap;
     Py_ssize_t index;
+    PyObject *heapmap = NULL;
 
-    if (!_PyArg_CheckPositional("heapfix", nargs, 2, 2)) {
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 2, 2, 0, argsbuf);
+    if (!args) {
         goto exit;
     }
     if (!PyList_Check(args[0])) {
@@ -233,36 +267,86 @@ _heapq_heapfix(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         }
         index = ival;
     }
-    return_value = _heapq_heapfix_impl(module, heap, index);
+    if (!noptargs) {
+        goto skip_optional_kwonly;
+    }
+    if (!PyDict_Check(args[2])) {
+        _PyArg_BadArgument("heapfix", "argument 'heapmap'", "dict", args[2]);
+        goto exit;
+    }
+    heapmap = args[2];
+skip_optional_kwonly:
+    return_value = _heapq_heapfix_impl(module, heap, index, heapmap);
 
 exit:
     return return_value;
 }
 
 PyDoc_STRVAR(_heapq_heapify__doc__,
-"heapify($module, heap, /)\n"
+"heapify($module, heap, /, *, heapmap=<unrepresentable>)\n"
 "--\n"
 "\n"
 "Transform list into a heap, in-place, in O(len(heap)) time.");
 
 #define _HEAPQ_HEAPIFY_METHODDEF    \
-    {"heapify", (PyCFunction)_heapq_heapify, METH_O, _heapq_heapify__doc__},
+    {"heapify", _PyCFunction_CAST(_heapq_heapify), METH_FASTCALL|METH_KEYWORDS, _heapq_heapify__doc__},
 
 static PyObject *
-_heapq_heapify_impl(PyObject *module, PyObject *heap);
+_heapq_heapify_impl(PyObject *module, PyObject *heap, PyObject *heapmap);
 
 static PyObject *
-_heapq_heapify(PyObject *module, PyObject *arg)
+_heapq_heapify(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
 {
     PyObject *return_value = NULL;
-    PyObject *heap;
+    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
 
-    if (!PyList_Check(arg)) {
-        _PyArg_BadArgument("heapify", "argument", "list", arg);
+    #define NUM_KEYWORDS 1
+    static struct {
+        PyGC_Head _this_is_not_used;
+        PyObject_VAR_HEAD
+        PyObject *ob_item[NUM_KEYWORDS];
+    } _kwtuple = {
+        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
+        .ob_item = { &_Py_ID(heapmap), },
+    };
+    #undef NUM_KEYWORDS
+    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
+
+    #else  // !Py_BUILD_CORE
+    #  define KWTUPLE NULL
+    #endif  // !Py_BUILD_CORE
+
+    static const char * const _keywords[] = {"", "heapmap", NULL};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .fname = "heapify",
+        .kwtuple = KWTUPLE,
+    };
+    #undef KWTUPLE
+    PyObject *argsbuf[2];
+    Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
+    PyObject *heap;
+    PyObject *heapmap = NULL;
+
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 1, 0, argsbuf);
+    if (!args) {
         goto exit;
     }
-    heap = arg;
-    return_value = _heapq_heapify_impl(module, heap);
+    if (!PyList_Check(args[0])) {
+        _PyArg_BadArgument("heapify", "argument 1", "list", args[0]);
+        goto exit;
+    }
+    heap = args[0];
+    if (!noptargs) {
+        goto skip_optional_kwonly;
+    }
+    if (!PyDict_Check(args[1])) {
+        _PyArg_BadArgument("heapify", "argument 'heapmap'", "dict", args[1]);
+        goto exit;
+    }
+    heapmap = args[1];
+skip_optional_kwonly:
+    return_value = _heapq_heapify_impl(module, heap, heapmap);
 
 exit:
     return return_value;
@@ -360,4 +444,4 @@ _heapq__heapify_max(PyObject *module, PyObject *arg)
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=4d721773c4515367 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=139c8fe066208797 input=a9049054013a1b77]*/

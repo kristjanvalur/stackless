@@ -22,7 +22,18 @@ module _heapq
 /*[clinic end generated code: output=da39a3ee5e6b4b0d input=d7cca0a2e4c0ceb3]*/
 
 static int
-siftdown(PyListObject *heap, Py_ssize_t startpos, Py_ssize_t *ppos)
+heapmap_set(PyObject *heapmap, PyObject* obj, Py_ssize_t pos)
+{
+    PyObject *intobj = PyLong_FromSsize_t(pos);
+    if (!intobj)
+        return -1;
+    int fail = PyDict_SetItem(heapmap, obj, intobj);
+    Py_DECREF(intobj);
+    return fail;
+}
+
+static int
+siftdown(PyListObject *heap, Py_ssize_t startpos, Py_ssize_t *ppos, PyObject *heapmap)
 {
     PyObject *newitem, *parent, **arr;
     Py_ssize_t parentpos, size;
@@ -62,14 +73,19 @@ siftdown(PyListObject *heap, Py_ssize_t startpos, Py_ssize_t *ppos)
         newitem = arr[pos];
         arr[parentpos] = newitem;
         arr[pos] = parent;
+        if (heapmap && heapmap_set(heapmap, parent, pos))
+            return -1;
         pos = parentpos;
     }
+    if (heapmap && heapmap_set(heapmap, arr[pos], pos))
+        return -1;
     *ppos = pos;
     return 0;
 }
 
+
 static int
-siftup(PyListObject *heap, Py_ssize_t pos)
+siftup(PyListObject *heap, Py_ssize_t pos, PyObject *heapmap)
 {
     Py_ssize_t startpos, endpos, childpos, limit;
     PyObject *tmp1, *tmp2, **arr;
@@ -112,10 +128,14 @@ siftup(PyListObject *heap, Py_ssize_t pos)
         tmp2 = arr[pos];
         arr[childpos] = tmp2;
         arr[pos] = tmp1;
+        /* maintain heapmap */
+        if (heapmap && heapmap_set(heapmap, tmp1, pos))
+            return -1;
         pos = childpos;
     }
     /* Bubble it up to its final resting place (by sifting its parents down). */
-    return siftdown(heap, startpos, &pos);
+
+    return siftdown(heap, startpos, &pos, heapmap);
 }
 
 /*[clinic input]
@@ -135,13 +155,13 @@ _heapq_heappush_impl(PyObject *module, PyObject *heap, PyObject *item)
     if (PyList_Append(heap, item))
         return NULL;
     Py_ssize_t pos = PyList_GET_SIZE(heap)-1;
-    if (siftdown((PyListObject *)heap, 0, &pos))
+    if (siftdown((PyListObject *)heap, 0, &pos, NULL))
         return NULL;
     Py_RETURN_NONE;
 }
 
 static PyObject *
-heapremove_internal(PyObject *heap, Py_ssize_t index, int siftup_func(PyListObject *, Py_ssize_t))
+heapremove_internal(PyObject *heap, Py_ssize_t index, int siftup_func(PyListObject *, Py_ssize_t, PyObject*))
 {
     PyObject *lastelt, *returnitem;
     Py_ssize_t n;
@@ -168,12 +188,12 @@ heapremove_internal(PyObject *heap, Py_ssize_t index, int siftup_func(PyListObje
     PyList_SET_ITEM(heap, index, lastelt);
     if (index > 0){
         /* there is no max version of heapremove */
-        if (siftdown((PyListObject *)heap, 0, &index)) {
+        if (siftdown((PyListObject *)heap, 0, &index, NULL)) {
             Py_DECREF(returnitem);
             return NULL;
         }
     }
-    if (siftup_func((PyListObject *)heap, index)) {
+    if (siftup_func((PyListObject *)heap, index, NULL)) {
         Py_DECREF(returnitem);
         return NULL;
     }
@@ -197,7 +217,7 @@ _heapq_heappop_impl(PyObject *module, PyObject *heap)
 }
 
 static PyObject *
-heapreplace_internal(PyObject *heap, PyObject *item, int siftup_func(PyListObject *, Py_ssize_t))
+heapreplace_internal(PyObject *heap, PyObject *item, int siftup_func(PyListObject *, Py_ssize_t, PyObject*))
 {
     PyObject *returnitem;
 
@@ -208,7 +228,7 @@ heapreplace_internal(PyObject *heap, PyObject *item, int siftup_func(PyListObjec
 
     returnitem = PyList_GET_ITEM(heap, 0);
     PyList_SET_ITEM(heap, 0, Py_NewRef(item));
-    if (siftup_func((PyListObject *)heap, 0)) {
+    if (siftup_func((PyListObject *)heap, 0, NULL)) {
         Py_DECREF(returnitem);
         return NULL;
     }
@@ -282,7 +302,7 @@ _heapq_heappushpop_impl(PyObject *module, PyObject *heap, PyObject *item)
 
     returnitem = PyList_GET_ITEM(heap, 0);
     PyList_SET_ITEM(heap, 0, Py_NewRef(item));
-    if (siftup((PyListObject *)heap, 0)) {
+    if (siftup((PyListObject *)heap, 0, NULL)) {
         Py_DECREF(returnitem);
         return NULL;
     }
@@ -315,13 +335,16 @@ _heapq.heapfix
     heap: object(subclass_of='&PyList_Type')
     index: Py_ssize_t
     /
+    *
+    heapmap: object(subclass_of='&PyDict_Type') = NULL
 
 Restore the heap invariant when the element at the given index has been modified.
 [clinic start generated code]*/
 
 static PyObject *
-_heapq_heapfix_impl(PyObject *module, PyObject *heap, Py_ssize_t index)
-/*[clinic end generated code: output=c06b38e98a062214 input=2eb44272c71f3106]*/
+_heapq_heapfix_impl(PyObject *module, PyObject *heap, Py_ssize_t index,
+                    PyObject *heapmap)
+/*[clinic end generated code: output=70b48e32df4d03a3 input=70f81f8c8f90fdf0]*/
 {
     Py_ssize_t n;
 
@@ -334,11 +357,14 @@ _heapq_heapfix_impl(PyObject *module, PyObject *heap, Py_ssize_t index)
         return NULL;
     }
 
+    if (heapmap && heapmap_set(heapmap, PyList_GET_ITEM(heap, index), index))
+        return NULL;
+
     if (index > 0){
-        if (siftdown((PyListObject *)heap, 0, &index))
+        if (siftdown((PyListObject *)heap, 0, &index, heapmap))
             return NULL;
     }
-    if (siftup((PyListObject *)heap, index))
+    if (siftup((PyListObject *)heap, index, heapmap))
         return NULL;
     Py_RETURN_NONE;
 }
@@ -377,7 +403,7 @@ keep_top_bit(Py_ssize_t n)
 */
 
 static PyObject *
-cache_friendly_heapify(PyObject *heap, int siftup_func(PyListObject *, Py_ssize_t))
+cache_friendly_heapify(PyObject *heap, int siftup_func(PyListObject *, Py_ssize_t, PyObject*))
 {
     Py_ssize_t i, j, m, mhalf, leftmost;
 
@@ -388,7 +414,7 @@ cache_friendly_heapify(PyObject *heap, int siftup_func(PyListObject *, Py_ssize_
     for (i = leftmost - 1 ; i >= mhalf ; i--) {
         j = i;
         while (1) {
-            if (siftup_func((PyListObject *)heap, j))
+            if (siftup_func((PyListObject *)heap, j, NULL))
                 return NULL;
             if (!(j & 1))
                 break;
@@ -399,7 +425,7 @@ cache_friendly_heapify(PyObject *heap, int siftup_func(PyListObject *, Py_ssize_
     for (i = m - 1 ; i >= leftmost ; i--) {
         j = i;
         while (1) {
-            if (siftup_func((PyListObject *)heap, j))
+            if (siftup_func((PyListObject *)heap, j, NULL))
                 return NULL;
             if (!(j & 1))
                 break;
@@ -410,7 +436,7 @@ cache_friendly_heapify(PyObject *heap, int siftup_func(PyListObject *, Py_ssize_
 }
 
 static PyObject *
-heapify_internal(PyObject *heap, int siftup_func(PyListObject *, Py_ssize_t))
+heapify_internal(PyObject *heap, int siftup_func(PyListObject *, Py_ssize_t, PyObject*), PyObject *heapmap)
 {
     Py_ssize_t i, n;
 
@@ -419,19 +445,27 @@ heapify_internal(PyObject *heap, int siftup_func(PyListObject *, Py_ssize_t))
        in cache, we prefer the simpler algorithm with less branching.
     */
     n = PyList_GET_SIZE(heap);
-    if (n > 2500)
-        return cache_friendly_heapify(heap, siftup_func);
-
-    /* Transform bottom-up.  The largest index there's any point to
-       looking at is the largest with a child index in-range, so must
-       have 2*i + 1 < n, or i < (n-1)/2.  If n is even = 2*j, this is
-       (2*j-1)/2 = j-1/2 so j-1 is the largest, which is n//2 - 1.  If
-       n is odd = 2*j+1, this is (2*j+1-1)/2 = j so j-1 is the largest,
-       and that's again n//2-1.
-    */
-    for (i = (n >> 1) - 1 ; i >= 0 ; i--)
-        if (siftup_func((PyListObject *)heap, i))
+    if (n > 2500) {
+        if (!cache_friendly_heapify(heap, siftup_func))
             return NULL;
+    } else {
+
+        /* Transform bottom-up.  The largest index there's any point to
+        looking at is the largest with a child index in-range, so must
+        have 2*i + 1 < n, or i < (n-1)/2.  If n is even = 2*j, this is
+        (2*j-1)/2 = j-1/2 so j-1 is the largest, which is n//2 - 1.  If
+        n is odd = 2*j+1, this is (2*j+1-1)/2 = j so j-1 is the largest,
+        and that's again n//2-1.
+        */
+        for (i = (n >> 1) - 1 ; i >= 0 ; i--)
+            if (siftup_func((PyListObject *)heap, i, NULL))
+                return NULL;
+    }
+    if (heapmap) {
+        for(i=0; i<n; i++)
+            if (heapmap_set(heapmap, PyList_GET_ITEM(heap, i), i))
+                return NULL;
+    }
     Py_RETURN_NONE;
 }
 
@@ -440,15 +474,17 @@ _heapq.heapify
 
     heap: object(subclass_of='&PyList_Type')
     /
+    *
+    heapmap: object(subclass_of='&PyDict_Type') = NULL
 
 Transform list into a heap, in-place, in O(len(heap)) time.
 [clinic start generated code]*/
 
 static PyObject *
-_heapq_heapify_impl(PyObject *module, PyObject *heap)
-/*[clinic end generated code: output=e63a636fcf83d6d0 input=53bb7a2166febb73]*/
+_heapq_heapify_impl(PyObject *module, PyObject *heap, PyObject *heapmap)
+/*[clinic end generated code: output=e198d5588cec3d23 input=134605c750204ba8]*/
 {
-    return heapify_internal(heap, siftup);
+    return heapify_internal(heap, siftup, heapmap);
 }
 
 static int
@@ -496,13 +532,14 @@ siftdown_max(PyListObject *heap, Py_ssize_t startpos, Py_ssize_t pos)
 }
 
 static int
-siftup_max(PyListObject *heap, Py_ssize_t pos)
+siftup_max(PyListObject *heap, Py_ssize_t pos, PyObject *heapmap)
 {
     Py_ssize_t startpos, endpos, childpos, limit;
     PyObject *tmp1, *tmp2, **arr;
     int cmp;
 
     assert(PyList_Check(heap));
+    assert(heapmap == NULL);
     endpos = PyList_GET_SIZE(heap);
     startpos = pos;
     if (pos >= endpos) {
@@ -593,7 +630,7 @@ static PyObject *
 _heapq__heapify_max_impl(PyObject *module, PyObject *heap)
 /*[clinic end generated code: output=2cb028beb4a8b65e input=c1f765ee69f124b8]*/
 {
-    return heapify_internal(heap, siftup_max);
+    return heapify_internal(heap, siftup_max, NULL);
 }
 
 static PyMethodDef heapq_methods[] = {
