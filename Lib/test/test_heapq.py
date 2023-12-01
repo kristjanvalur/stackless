@@ -74,12 +74,18 @@ class TestHeap:
         except AttributeError:
             pass
 
-    def check_invariant(self, heap):
+    def check_invariant(self, heap, heapmap=None):
         # Check the heap invariant.
         for pos, item in enumerate(heap):
             if pos: # pos 0 has no parent
                 parentpos = (pos-1) >> 1
                 self.assertTrue(heap[parentpos] <= item)
+        if heapmap is not None:
+            # all objects in heap should be in the map and in right position
+            for i, obj in enumerate(heap):
+                self.assertEqual(heapmap[obj], i)
+            # there should be nothing else in the map
+            self.assertEqual(len(heapmap), len(heap))
 
     def test_heapify(self):
         for size in list(range(30)) + [20000]:
@@ -265,7 +271,9 @@ class TestHeap:
 
     def test_remove(self):
         data = [random.random() for i in range(100)]
-        self.module.heapify(data)
+        heapset = set(data)
+        heapmap = {}
+        self.module.heapify(data, heapmap=heapmap)
         heapset = set(data)
         self.assertEqual(len(data), len(heapset))
 
@@ -273,7 +281,7 @@ class TestHeap:
             self.module.heapremove(data, len(data))
         with self.assertRaises(IndexError) as e:
             self.module.heapremove(data, -len(data) - 1)
-        self.check_invariant(data)
+        self.check_invariant(data, heapmap)
         self.assertEqual(heapset, set(data))
 
         for i in range(len(data)):
@@ -285,14 +293,16 @@ class TestHeap:
             v = data[i]
             # print(len(data), i, v)
             heapset.remove(v)
-            self.assertIs(self.module.heapremove(data, i), v)
+            self.assertIs(self.module.heapremove(data, i, heapmap=heapmap), v)
             self.assertEqual(heapset, set(data))
-            self.check_invariant(data)
+            self.assertEqual(heapset, set(heapmap.keys()))
+            self.check_invariant(data, heapmap)
         self.assertFalse(data)
 
     def test_fix(self):
         data = [random.random() for i in range(100)]
-        self.module.heapify(data)
+        heapmap = {}    
+        self.module.heapify(data, heapmap)
         heapset = set(data)
         self.assertEqual(len(data), len(heapset))
         
@@ -300,7 +310,7 @@ class TestHeap:
             self.module.heapfix(data, len(data))
         with self.assertRaises(IndexError) as e:
             self.module.heapfix(data, -len(data) - 1)
-        self.check_invariant(data)
+        self.check_invariant(data, heapmap)
         self.assertEqual(heapset, set(data))
 
         for i in range(200):
@@ -313,10 +323,11 @@ class TestHeap:
             # print(len(data), i, data[i], replace)
             heapset.remove(data[i])
             heapset.add(replace)
+            del heapmap[data[i]]
             data[i] = replace
-            self.module.heapfix(data, i)
+            self.module.heapfix(data, i, heapmap=heapmap)
             self.assertEqual(heapset, set(data))
-            self.check_invariant(data)
+            self.check_invariant(data, heapmap)
         self.assertEqual(len(data), 100)
 
     def test_fix_err(self):

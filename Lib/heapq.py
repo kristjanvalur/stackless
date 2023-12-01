@@ -129,12 +129,12 @@ From all times, sorting has always been a Great Art! :-)
 __all__ = ['heappush', 'heappop', 'heapify', 'heapreplace', 'merge',
            'nlargest', 'nsmallest', 'heappushpop']
 
-def heappush(heap, item):
+def heappush(heap, item, *, heapmap=None):
     """Push item onto heap, maintaining the heap invariant."""
     heap.append(item)
-    _siftdown(heap, 0, len(heap)-1)
+    _siftdown(heap, 0, len(heap)-1, heapmap)
 
-def heappop(heap):
+def heappop(heap, *, heapmap=None):
     """Pop the smallest item off the heap, maintaining the heap invariant.
 
     This is equivalent to heapremove(heap, 0)
@@ -143,11 +143,16 @@ def heappop(heap):
     if heap:
         returnitem = heap[0]
         heap[0] = lastelt
-        _siftup(heap, 0)
-        return returnitem
+        if heapmap is not None:
+            heapmap[lastelt] = 0
+        _siftup(heap, 0, heapmap)
+        lastelt = returnitem
+
+    if heapmap is not None:
+        heapmap.pop(lastelt, None)
     return lastelt
 
-def heapreplace(heap, item):
+def heapreplace(heap, item, *, heapmap=None):
     """Pop and return the current smallest value, and add the new item.
 
     This is more efficient than heappop() followed by heappush(), and can be
@@ -160,17 +165,23 @@ def heapreplace(heap, item):
     """
     returnitem = heap[0]    # raises appropriate IndexError if heap is empty
     heap[0] = item
-    _siftup(heap, 0)
+    if heapmap is not None:
+        heapmap.pop(returnitem, None)
+        heapmap[item] = 0
+    _siftup(heap, 0, heapmap)
     return returnitem
 
-def heappushpop(heap, item):
+def heappushpop(heap, item, *, heapmap=None):
     """Fast version of a heappush followed by a heappop."""
     if heap and heap[0] < item:
         item, heap[0] = heap[0], item
-        _siftup(heap, 0)
+        if heapmap:
+            heapmap.pop(item, None)
+            heapmap[heap[0]] = 0
+        _siftup(heap, 0, heapmap)
     return item
 
-def heapremove(heap, index):
+def heapremove(heap, index, *, heapmap=None):
     """Remove the element at the given index maintaining the heap invariant.
 
     Returns the removed object.
@@ -183,23 +194,31 @@ def heapremove(heap, index):
     try:
         heap[index] = lastelt
     except IndexError:  # if this was the last item
-        return result
-
-    if index > 0:
-        index = _siftdown(heap, 0, index)
-    _siftup(heap, index)
+        pass
+    else:
+        if heapmap is not None:
+            heapmap[lastelt] = index
+        if index > 0:
+            index = _siftdown(heap, 0, index, heapmap)
+        _siftup(heap, index, heapmap)
+    if heapmap is not None:
+        heapmap.pop(result, None)
     return result
 
-def heapfix(heap, index):
+def heapfix(heap, index, *, heapmap=None):
     """Restore the heap invariant if element at the given index has changed."""
-    heap[index]  # trigger an index error for invalid indices
+    item = heap[index]  # trigger an index error for invalid indices
+    if heapmap is not None:
+        # we can (re)add the object into the heapmap, but if it
+        # is a new object, the caller should have removed the old object.
+        heapmap[item] = index
     if index < 0:
         index += len(heap)
     if index > 0:
-        index = _siftdown(heap, 0, index)
-    _siftup(heap, index)
+        index = _siftdown(heap, 0, index, heapmap)
+    _siftup(heap, index, heapmap)
 
-def heapify(x):
+def heapify(x, *, heapmap=None):
     """Transform list into a heap, in-place, in O(len(x)) time."""
     n = len(x)
     # Transform bottom-up.  The largest index there's any point to looking at
@@ -209,6 +228,9 @@ def heapify(x):
     # (2*j+1-1)/2 = j so j-1 is the largest, and that's again n//2-1.
     for i in reversed(range(n//2)):
         _siftup(x, i)
+    if heapmap is not None:
+        for i, o in enumerate(x):
+            heapmap[o] = i
 
 def _heappop_max(heap):
     """Maxheap version of a heappop."""
@@ -236,7 +258,7 @@ def _heapify_max(x):
 # 'heap' is a heap at all indices >= startpos, except possibly for pos.  pos
 # is the index of a leaf with a possibly out-of-order value.  Restore the
 # heap invariant.
-def _siftdown(heap, startpos, pos):
+def _siftdown(heap, startpos, pos, heapmap=None):
     newitem = heap[pos]
     # Follow the path to the root, moving parents down until finding a place
     # newitem fits.
@@ -245,10 +267,14 @@ def _siftdown(heap, startpos, pos):
         parent = heap[parentpos]
         if newitem < parent:
             heap[pos] = parent
+            if heapmap is not None:
+                heapmap[parent] = pos
             pos = parentpos
             continue
         break
     heap[pos] = newitem
+    if heapmap is not None:
+        heapmap[newitem] = pos
     return pos
 
 # The child indices of heap index pos are already heaps, and we want to make
@@ -290,7 +316,7 @@ def _siftdown(heap, startpos, pos):
 # heappop() compares):  list.sort() is (unsurprisingly!) more efficient
 # for sorting.
 
-def _siftup(heap, pos):
+def _siftup(heap, pos, heapmap=None):
     endpos = len(heap)
     startpos = pos
     newitem = heap[pos]
@@ -302,13 +328,17 @@ def _siftup(heap, pos):
         if rightpos < endpos and not heap[childpos] < heap[rightpos]:
             childpos = rightpos
         # Move the smaller child up.
-        heap[pos] = heap[childpos]
+        child = heap[childpos]
+        heap[pos] = child
+        if heapmap is not None:
+            heapmap[child] = pos
         pos = childpos
         childpos = 2*pos + 1
     # The leaf at pos is empty now.  Put newitem there, and bubble it up
     # to its final resting place (by sifting its parents down).
     heap[pos] = newitem
-    _siftdown(heap, startpos, pos)
+    # _siftdown will update the heapmap for heap[pos]
+    _siftdown(heap, startpos, pos, heapmap)
 
 def _siftdown_max(heap, startpos, pos):
     'Maxheap variant of _siftdown'
