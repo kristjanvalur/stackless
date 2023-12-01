@@ -50,16 +50,17 @@ class TestHeap:
         # 1) Push 256 random numbers and pop them off, verifying all's OK.
         heap = []
         data = []
-        self.check_invariant(heap)
+        heapmap = {}
+        self.check_invariant(heap, heapmap)
         for i in range(256):
             item = random.random()
             data.append(item)
-            self.module.heappush(heap, item)
-            self.check_invariant(heap)
+            self.module.heappush(heap, item, heapmap=heapmap)
+            self.check_invariant(heap, heapmap)
         results = []
         while heap:
-            item = self.module.heappop(heap)
-            self.check_invariant(heap)
+            item = self.module.heappop(heap, heapmap=heapmap)
+            self.check_invariant(heap, heapmap)
             results.append(item)
         data_sorted = data[:]
         data_sorted.sort()
@@ -81,10 +82,23 @@ class TestHeap:
                 parentpos = (pos-1) >> 1
                 self.assertTrue(heap[parentpos] <= item)
         if heapmap is not None:
-            # all objects in heap should be in the map and in right position
-            for i, obj in enumerate(heap):
-                self.assertEqual(heapmap[obj], i)
-            # there should be nothing else in the map
+            self.check_heapmap(heap, heapmap)
+
+    def check_heapmap(self, heap, heapmap):
+        if len(set(heap)) < len(heap):
+            strict = False
+        else:
+            strict = True
+        if not strict:
+            # all objects in heapmap should be on the heap.  Possibly
+            # the heap doesn't have unique objects
+            for obj, idx in heapmap.items():
+                assert heap[idx] == obj
+            assert len(heapmap) <= len(heap)
+        else:
+            # there should be 1 to 1 correspondence between heap and map
+            for idx, obj in enumerate(heap):
+                self.assertEqual(heapmap[obj], idx)
             self.assertEqual(len(heapmap), len(heap))
 
     def test_heapify(self):
@@ -92,6 +106,9 @@ class TestHeap:
             heap = [random.random() for dummy in range(size)]
             self.module.heapify(heap)
             self.check_invariant(heap)
+            heapmap = {}
+            self.module.heapify(heap, heapmap=heapmap)
+            self.check_invariant(heap, heapmap)
 
         self.assertRaises(TypeError, self.module.heapify, None)
 
@@ -121,10 +138,12 @@ class TestHeap:
         # (10 log-time steps).
         data = [random.randrange(2000) for i in range(1000)]
         heap = data[:10]
-        self.module.heapify(heap)
+        heapmap = {}
+        self.module.heapify(heap, heapmap=heapmap)
         for item in data[10:]:
             if item > heap[0]:  # this gets rarer the longer we run
-                self.module.heapreplace(heap, item)
+                self.module.heapreplace(heap, item, heapmap=heapmap)
+                self.check_invariant(heap, heapmap)
         self.assertEqual(list(self.heapiter(heap)), sorted(data)[-10:])
 
         self.assertRaises(TypeError, self.module.heapreplace, None)
@@ -134,9 +153,11 @@ class TestHeap:
     def test_nbest_with_pushpop(self):
         data = [random.randrange(2000) for i in range(1000)]
         heap = data[:10]
-        self.module.heapify(heap)
+        heapmap = {}
+        self.module.heapify(heap, heapmap=heapmap)
         for item in data[10:]:
-            self.module.heappushpop(heap, item)
+            self.module.heappushpop(heap, item, heapmap=heapmap)
+            self.check_invariant(heap, heapmap)
         self.assertEqual(list(self.heapiter(heap)), sorted(data)[-10:])
         self.assertEqual(self.module.heappushpop([], 'x'), 'x')
 
@@ -301,11 +322,11 @@ class TestHeap:
 
     def test_fix(self):
         data = [random.random() for i in range(100)]
-        heapmap = {}    
-        self.module.heapify(data, heapmap)
+        heapmap = {}
+        self.module.heapify(data, heapmap=heapmap)
         heapset = set(data)
         self.assertEqual(len(data), len(heapset))
-        
+
         with self.assertRaises(IndexError) as e:
             self.module.heapfix(data, len(data))
         with self.assertRaises(IndexError) as e:
