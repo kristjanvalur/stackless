@@ -44,22 +44,31 @@ def load_tests(loader, tests, ignore):
                                         test_finder=HeapqMergeDocTestFinder()))
     return tests
 
+class Heapmap(dict):
+    """A class to store the heap, providing a "update_idx" callable"""
+    def __call__(self, key, index):
+        if index is not None:
+            self[key] = index
+        else:
+            del self[key]
+
 class TestHeap:
 
     def test_push_pop(self):
         # 1) Push 256 random numbers and pop them off, verifying all's OK.
         heap = []
         data = []
-        heapmap = {}
+        heapmap = Heapmap()
+
         self.check_invariant(heap, heapmap)
         for i in range(256):
             item = random.random()
             data.append(item)
-            self.module.heappush(heap, item, heapmap=heapmap)
+            self.module.heappush(heap, item, update_idx=heapmap)
             self.check_invariant(heap, heapmap)
         results = []
         while heap:
-            item = self.module.heappop(heap, heapmap=heapmap)
+            item = self.module.heappop(heap, update_idx=heapmap)
             self.check_invariant(heap, heapmap)
             results.append(item)
         data_sorted = data[:]
@@ -106,8 +115,9 @@ class TestHeap:
             heap = [random.random() for dummy in range(size)]
             self.module.heapify(heap)
             self.check_invariant(heap)
-            heapmap = {}
-            self.module.heapify(heap, heapmap=heapmap)
+            heapmap = Heapmap()
+
+            self.module.heapify(heap, update_idx=heapmap)
             self.check_invariant(heap, heapmap)
 
         self.assertRaises(TypeError, self.module.heapify, None)
@@ -138,11 +148,12 @@ class TestHeap:
         # (10 log-time steps).
         data = [random.randrange(2000) for i in range(1000)]
         heap = data[:10]
-        heapmap = {}
-        self.module.heapify(heap, heapmap=heapmap)
+        heapmap = Heapmap()
+
+        self.module.heapify(heap, update_idx=heapmap)
         for item in data[10:]:
             if item > heap[0]:  # this gets rarer the longer we run
-                self.module.heapreplace(heap, item, heapmap=heapmap)
+                self.module.heapreplace(heap, item, update_idx=heapmap)
                 self.check_invariant(heap, heapmap)
         self.assertEqual(list(self.heapiter(heap)), sorted(data)[-10:])
 
@@ -153,10 +164,11 @@ class TestHeap:
     def test_nbest_with_pushpop(self):
         data = [random.randrange(2000) for i in range(1000)]
         heap = data[:10]
-        heapmap = {}
-        self.module.heapify(heap, heapmap=heapmap)
+        heapmap = Heapmap()
+
+        self.module.heapify(heap, update_idx=heapmap)
         for item in data[10:]:
-            self.module.heappushpop(heap, item, heapmap=heapmap)
+            self.module.heappushpop(heap, item, update_idx=heapmap)
             self.check_invariant(heap, heapmap)
         self.assertEqual(list(self.heapiter(heap)), sorted(data)[-10:])
         self.assertEqual(self.module.heappushpop([], 'x'), 'x')
@@ -293,8 +305,9 @@ class TestHeap:
     def test_remove(self):
         data = [random.random() for i in range(100)]
         heapset = set(data)
-        heapmap = {}
-        self.module.heapify(data, heapmap=heapmap)
+        heapmap = Heapmap()
+
+        self.module.heapify(data, update_idx=heapmap)
         heapset = set(data)
         self.assertEqual(len(data), len(heapset))
 
@@ -314,7 +327,7 @@ class TestHeap:
             v = data[i]
             # print(len(data), i, v)
             heapset.remove(v)
-            self.assertIs(self.module.heapremove(data, i, heapmap=heapmap), v)
+            self.assertIs(self.module.heapremove(data, i, update_idx=heapmap), v)
             self.assertEqual(heapset, set(data))
             self.assertEqual(heapset, set(heapmap.keys()))
             self.check_invariant(data, heapmap)
@@ -322,8 +335,8 @@ class TestHeap:
 
     def test_fix(self):
         data = [random.random() for i in range(100)]
-        heapmap = {}
-        self.module.heapify(data, heapmap=heapmap)
+        heapmap = Heapmap()
+        self.module.heapify(data, update_idx=heapmap)
         heapset = set(data)
         self.assertEqual(len(data), len(heapset))
 
@@ -346,7 +359,7 @@ class TestHeap:
             heapset.add(replace)
             del heapmap[data[i]]
             data[i] = replace
-            self.module.heapfix(data, i, heapmap=heapmap)
+            self.module.heapfix(data, i, update_idx=heapmap)
             self.assertEqual(heapset, set(data))
             self.check_invariant(data, heapmap)
         self.assertEqual(len(data), 100)
@@ -398,6 +411,70 @@ class TestHeap:
         # we should be at least 10 times more efficient (more like 40)
         #  print(c1, c2)
         self.assertTrue(c2 > c1 * 10)
+
+    def test_update_idx(self):
+        # Test various aspects of update_idx
+
+        heap = []
+        # pushing works without update_idx
+
+        self.module.heappush(heap, 1)
+        self.assertEqual(heap, [1])
+
+        # heap_idx is a kw only arg
+        with self.assertRaises(TypeError):
+            self.module.heappush(heap, 2, lambda a, b: None)
+        self.module.heappush(heap, 2, update_idx=lambda a, b: None)
+        self.assertEqual(heap, [1, 2])
+
+        # error gets propagated:
+        with self.assertRaises(IndexError):
+            self.module.heappush(heap, 2, update_idx=lambda a, b: [][0])
+
+        # heap is in undefined state after an exception, lets recreate it
+        heap = [1, 2]
+
+        # pushing 0 should update some indices
+        updates = []
+        self.module.heappush(heap, 0, update_idx=lambda a, b: updates.append((a,b)))
+        self.assertEqual(len(heap), 3)
+        # check that the final updates for the values correspond to the positions in the heap
+        last = {u[0]:u[1] for u in updates}
+        self.assertTrue(last)
+        for v, i in last.items():
+            self.assertEqual(heap.index(v), i)
+
+        # verify an update of the elements themselves
+        data = [[random.random(), -1] for i in range(100)]
+        heap = data[:]  # shallow copy
+
+        def cb(key, i):
+            key[1] = i
+
+        self.module.heapify(heap, update_idx=cb)
+        self.check_invariant(heap)
+
+        # check that the indices are there, and that the data point to their own
+        # place in the heap
+        for e in data:
+            self.assertIs(e, heap[e[1]])
+
+        # do some shuffling
+        for _ in range(100):
+            i = random.randrange(0, len(heap))
+            e = self.module.heapremove(heap, i, update_idx=cb)
+            self.assertIs(e[1], None)
+            self.module.heappush(heap, e, update_idx=cb)
+            self.assertTrue(e[1] >= 0)
+
+        for e in data:
+            self.assertIs(e, heap[e[1]])
+
+        # we can remove an arbitrary item from the heap now:
+        e = data[40]
+        idx = e[1]
+        r = self.module.heapremove(heap, idx)
+        self.assertIs(e, r)
 
 
 class TestHeapPython(TestHeap, TestCase):
